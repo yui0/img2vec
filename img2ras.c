@@ -274,7 +274,7 @@ void color_replace(oct_node root, unsigned char *pix)
 /* Building an octree and keep leaf nodes in a bin heap.  Afterwards remove first node
    in heap and fold it into its parent node (which may now be added to heap), until heap
    contains required number of colors. */
-void color_quant(image im, int n_colors, char *name)
+void color_quant(image im, int n_colors, char *name, int flag)
 {
 	int i;
 	unsigned char *pix = im->pix;
@@ -305,10 +305,11 @@ void color_quant(image im, int n_colors, char *name)
 	}
 
 	// output
+	if (flag&1) stbi_write_jpg("posterized.jpg", im->w, im->h, 3, im->pix, 0);
 	FILE *fp = fopen(name, "w");
 	fprintf(fp, "%%!PS-Adobe-3.0 EPSF-3.0\n");
 	fprintf(fp, "%%%%BoundingBox: 0 0 %d %d\n", im->w, im->h);
-	uint8_t *img = malloc(im->w * im->h *3);
+	uint8_t *img = malloc(im->w * im->h *3*2);
 	for (i=1; i < heap.n; i++) {
 		memset(img, 0, im->w * im->h *3);
 		got = heap.buf[i];
@@ -318,12 +319,23 @@ void color_quant(image im, int n_colors, char *name)
 				img[n*3] = got->r;
 				img[n*3+1] = got->g;
 				img[n*3+2] = got->b;
+				/*img[n*3] = 255;
+				img[n*3+1] = 255;
+				img[n*3+2] = 255;*/
 			}
 		}
 //		char str[256];
 //		snprintf(str, sizeof(str), "original_d%02d.bmp", i);
 //		stbi_write_bmp(str, im->w, im->h, 3, img);
-		img2ras(fp, img, im->w, im->h, got->r, got->g, got->b);
+		if (flag&4) {
+			if (got->r==255 && got->g==255 && got->b==255) continue;
+		}
+		if (flag&2) {
+			_imgp_dilate(img, im->w, im->h, 3, img+im->w * im->h *3);
+			img2ras(fp, img+im->w * im->h *3, im->w, im->h, got->r, got->g, got->b);
+		} else {
+			img2ras(fp, img, im->w, im->h, got->r, got->g, got->b);
+		}
 	}
 	free(img);
 	fprintf(fp, "%%EOF\n");
@@ -331,29 +343,6 @@ void color_quant(image im, int n_colors, char *name)
 
 	node_free();
 	free(heap.buf);
-}
-
-void _imgp_dilate(uint8_t *s, int w, int h, int bpp, uint8_t *p)
-{
-	for (int y=1; y<h-1; y++) {
-		for (int x=1; x<w-1; x++) {
-			for (int b=0; b<bpp; b++) {
-				uint8_t uc = s[ (y+0)*w*bpp + (x+0)*bpp+b ]; // centre
-				uint8_t ua = s[ (y-1)*w*bpp + (x+0)*bpp+b ]; // above
-				uint8_t ub = s[ (y+1)*w*bpp + (x+0)*bpp+b ]; // below
-				uint8_t ul = s[ (y+0)*w*bpp + (x-1)*bpp+b ]; // left
-				uint8_t ur = s[ (y+0)*w*bpp + (x+1)*bpp+b ]; // right
-
-				uint8_t ux = 0;
-				if (uc > ux) ux = uc;
-				if (ua > ux) ux = ua;
-				if (ub > ux) ux = ub;
-				if (ul > ux) ux = ul;
-				if (ur > ux) ux = ur;
-				p[ y*w*bpp + x*bpp+b ] = ux;
-			}
-		}
-	}
 }
 
 /*double emboss_kernel[3*3] = {
@@ -389,6 +378,7 @@ int main(int argc, char* argv[])
 	char *name = argv[1];
 	char *outfile = "output.eps";
 	int color = 32;
+	int flag = 0;
 
 	if (argc <=1) {
 		return 0;
@@ -398,6 +388,12 @@ int main(int argc, char* argv[])
 			outfile = argv[++i];
 		} else if (!strcmp(argv[i], "-c")) {
 			color = atoi(argv[++i]);
+		} else if (!strcmp(argv[i], "-d")) {
+			flag = 1; // debug
+		} else if (!strcmp(argv[i], "-x")) {
+			flag = 2; // dilate
+		} else if (!strcmp(argv[i], "-a")) {
+			flag = 4; // alpha
 		} else {
 			name = argv[i];
 			//printf("%s\n", name);
@@ -435,8 +431,8 @@ int main(int argc, char* argv[])
 	uint8_t *dilated = gray+w*h;
 	uint8_t *diff = gray+w*h*2;
 	uint8_t *contour = gray+w*h*3;
-//	imgp_gray(pixels, w, h, w, gray, w);
-	color_quant(&(image_t) {w, h, pixels}, color, outfile);
+	imgp_gray(pixels, w, h, w, gray, w);
+	color_quant(&(image_t) {w, h, pixels}, color, outfile, flag);
 //	stbi_write_bmp("original64.bmp", w, h, 3, pixels);
 //	stbi_write_bmp("gray.bmp", w, h, 1, gray);
 	imgp_dilate(gray, w, h/*, 5*/, dilated);
