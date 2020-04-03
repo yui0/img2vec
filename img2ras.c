@@ -274,7 +274,7 @@ void color_replace(oct_node root, unsigned char *pix)
 /* Building an octree and keep leaf nodes in a bin heap.  Afterwards remove first node
    in heap and fold it into its parent node (which may now be added to heap), until heap
    contains required number of colors. */
-void color_quant(image im, int n_colors)
+void color_quant(image im, int n_colors, char *name)
 {
 	int i;
 	unsigned char *pix = im->pix;
@@ -305,7 +305,7 @@ void color_quant(image im, int n_colors)
 	}
 
 	// output
-	FILE *fp = fopen("_output.eps", "w");
+	FILE *fp = fopen(name, "w");
 	fprintf(fp, "%%!PS-Adobe-3.0 EPSF-3.0\n");
 	fprintf(fp, "%%%%BoundingBox: 0 0 %d %d\n", im->w, im->h);
 	uint8_t *img = malloc(im->w * im->h *3);
@@ -387,6 +387,23 @@ double magic_kernel[4*4] = {
 int main(int argc, char* argv[])
 {
 	char *name = argv[1];
+	char *outfile = "output.eps";
+	int color = 32;
+
+	if (argc <=1) {
+		return 0;
+	}
+	for (int i=1; i<argc; i++) {
+		if (!strcmp(argv[i], "-o")) {
+			outfile = argv[++i];
+		} else if (!strcmp(argv[i], "-c")) {
+			color = atoi(argv[++i]);
+		} else {
+			name = argv[i];
+			//printf("%s\n", name);
+		}
+	}
+
 
 	uint8_t *pixels;
 	int w, h, bpp;
@@ -419,8 +436,7 @@ int main(int argc, char* argv[])
 	uint8_t *diff = gray+w*h*2;
 	uint8_t *contour = gray+w*h*3;
 //	imgp_gray(pixels, w, h, w, gray, w);
-////	color_quant(&(image_t) {w, h, pixels}, 64);
-	color_quant(&(image_t) {w, h, pixels}, 8);
+	color_quant(&(image_t) {w, h, pixels}, color, outfile);
 //	stbi_write_bmp("original64.bmp", w, h, 3, pixels);
 //	stbi_write_bmp("gray.bmp", w, h, 1, gray);
 	imgp_dilate(gray, w, h/*, 5*/, dilated);
