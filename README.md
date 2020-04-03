@@ -12,7 +12,7 @@ $ make
 
 ```
 $ ./img2ras girl-1118419_1280.jpg -c 2 -o girl-1118419.eps
-$ ./img2ras night-4926430_1920.jpg -c 2 -o night-4926430_1920.eps
+$ ./img2ras night-4926430_1920.jpg -c 16 -o night-4926430.eps
 $ ./img2ras sparkler-677774_1920.jpg -c 32 -x -o sparkler-677774.eps
 $ ./img2ras publicdomainq-0041064ikt.jpg -a -c 8 -o publicdomainq-0041064ikt.eps
 ```
@@ -30,13 +30,13 @@ Original image
 ![Original](night-4926430_1920.jpg)
 
 img2ras output
-![Output](night-4926430.svgz)
+![Output](night-4926430.svg)
 
 Original image
 ![Original](sparkler-677774_1920.jpg)
 
 img2ras output
-![Output](sparkler-677774.svgz)
+![Output](sparkler-677774.svg)
 
 Original image
 ![Original](publicdomainq-0041064ikt.jpg)
