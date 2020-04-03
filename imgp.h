@@ -2,10 +2,15 @@
  *	©2018-2020 Yuichiro Nakada
  *
  * Basic usage:
- *	imgp_gray(pixels, w, h, w, gray, w);
+ *	imgp_gray(pixels, w, h, w, gray, w);		// 24bit -> 8bit
+ *	imgp_dilate(gray, w, h, dilated);		// only 8bit
+ *	imgp_absdiff(gray, dilated, w, h, diff);	// only 8bit
+ *	imgp_reverse(diff, w, h, contour);		// only 8bit
  *
  *	uint8_t ahash[AHASH_SIZE*AHASH_SIZE/8];
- *	imgp_ahash(gray, w, h, ahash);
+ *	imgp_ahash(gray, w, h, ahash);		// only 8bit
+ *
+ *	imgp_filter(out, in, w, h, kernel, kernel_size, divisor, offset);	// only 24bit
  * */
 
 void imgp_gray(uint8_t *s, int sx, int sy, int stride, uint8_t *p, int gstride)
@@ -133,3 +138,40 @@ void imgp_ahash(uint8_t *s, int w, int h, uint8_t *ahash)
 	printf("\n");*/
 }
 #endif
+
+/*double magic_kernel[4*4] = {
+	1/64.0, 3/64.0, 3/64.0, 1/64.0,
+	3/64.0, 9/64.0, 9/64.0, 3/64.0,
+	3/64.0, 9/64.0, 9/64.0, 3/64.0,
+	1/64.0, 3/64.0, 3/64.0, 1/64.0,
+};*/
+void imgp_filter(uint8_t *o, uint8_t *im, int w, int h, double *K, int Ks, double divisor, double offset)
+{
+	unsigned int ix, iy, x, y;
+	int kx, ky;
+	double r, g, b, p;
+
+	for (ix=0; ix<w; ix++) {
+		for (iy=0; iy<h; iy++) {
+			r = g = b = 0.0;
+			for (kx=-Ks; kx<=Ks; kx++) {
+				for (ky=-Ks; ky<=Ks; ky++) {
+					x = ix+kx;
+					y = iy+ky;
+					p = ((x<0) || (x>=w) || (y<0) || (y>=h)) ? 0 : im[(ix+kx + (iy+ky)*w)*3];
+					r += (K[(kx+Ks) + (ky+Ks)*(2*Ks+1)]/divisor) * p + offset;
+					p = ((x<0) || (x>=w) || (y<0) || (y>=h)) ? 0 : im[(ix+kx + (iy+ky)*w)*3 +1];
+					g += (K[(kx+Ks) + (ky+Ks)*(2*Ks+1)]/divisor) * p + offset;
+					p = ((x<0) || (x>=w) || (y<0) || (y>=h)) ? 0 : im[(ix+kx + (iy+ky)*w)*3 +2];
+					b += (K[(kx+Ks) + (ky+Ks)*(2*Ks+1)]/divisor) * p + offset;
+				}
+			}
+			r = (r>255.0) ? 255.0 : ((r<0.0) ? 0.0 : r);
+			g = (g>255.0) ? 255.0 : ((g<0.0) ? 0.0 : g);
+			b = (b>255.0) ? 255.0 : ((b<0.0) ? 0.0 : b);
+			o[(ix + iy*w)*3] = r;
+			o[(ix + iy*w)*3 +1] = g;
+			o[(ix + iy*w)*3 +2] = b;
+		}
+	}
+}

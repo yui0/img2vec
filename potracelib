@@ -1,0 +1,4 @@
+curve.c
+trace.c
+decompose.c
+potracelib.c
