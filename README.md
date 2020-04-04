@@ -21,9 +21,11 @@ Options:
 -b <scale>         Blur image
 
 $ ./img2ras girl-1118419_1280.jpg -c 2 -o girl-1118419.eps
-$ ./img2ras night-4926430_1920.jpg -c 16 -o night-4926430.eps
 $ ./img2ras sparkler-677774_1920.jpg -c 32 -x -o sparkler-677774.eps
 $ ./img2ras publicdomainq-0041064ikt.jpg -c 8 -a -b 4 -o publicdomainq-0041064ikt.eps
+$ ./img2ras publicdomainq-0017653mro.jpg -c 5 -a -o publicdomainq-0017653mro.eps
+$ ./img2ras 1098751.jpg -o 1098751.eps -c 32 -a -b 4
+$ ./img2ras night-4926430_1920.jpg -c 16 -o night-4926430.eps
 ```
 
 ## Example
@@ -36,12 +38,6 @@ img2ras output
 ![Output](girl-1118419.svg)
 
 Original image
-![Original](night-4926430_1920.jpg)
-
-img2ras output
-![Output](night-4926430.svg)
-
-Original image
 ![Original](sparkler-677774_1920.jpg)
 
 img2ras output
@@ -52,4 +48,16 @@ Original image
 
 img2ras output
 ![Output](publicdomainq-0041064ikt.svg)
+
+Original image
+![Original](publicdomainq-0017653mro.jpg)
+
+img2ras output
+![Output](publicdomainq-0017653mro.svg)
+
+Original image
+![Original](night-4926430_1920.jpg)
+
+img2ras output
+![Output](night-4926430.svg)
 
