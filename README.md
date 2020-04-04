@@ -11,10 +11,19 @@ $ make
 ## How to use
 
 ```
+$ ./img2ras
+Usage: ./img2ras [options] file
+
+Options:
+-h                 Print this message
+-o <output name>   Output file name
+-c                 Reduce color [default:32]
+-b <scale>         Blur image
+
 $ ./img2ras girl-1118419_1280.jpg -c 2 -o girl-1118419.eps
 $ ./img2ras night-4926430_1920.jpg -c 16 -o night-4926430.eps
 $ ./img2ras sparkler-677774_1920.jpg -c 32 -x -o sparkler-677774.eps
-$ ./img2ras publicdomainq-0041064ikt.jpg -a -c 8 -o publicdomainq-0041064ikt.eps
+$ ./img2ras publicdomainq-0041064ikt.jpg -c 8 -a -b 4 -o publicdomainq-0041064ikt.eps
 ```
 
 ## Example
