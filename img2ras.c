@@ -83,10 +83,10 @@ int img2ras(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag)
 //			if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\"/>", r, g, b);
 		}
 		p = p->next;
-		//if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\" stroke=\"#%02x%02x%02x", r, g, b, r, g, b);
-		//if (flag&32) fprintf(fp, "\"/>\n");
+		if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\" stroke=\"#%02x%02x%02x", r, g, b, r, g, b);
+		if (flag&32) fprintf(fp, "\"/>\n");
 //		if (flag&32) fprintf(fp, "\" stroke=\"#%02x%02x%02x\"/>", r, g, b);
-		if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\"/>", r, g, b);
+//		if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\"/>", r, g, b);
 	}
 	if (!(flag&32)) fprintf(fp, "grestore\n");
 	//printf("%%EOF\n");
