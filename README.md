@@ -23,6 +23,7 @@ Options:
 
 $ ./img2vec girl-1118419_1280.jpg -c 2 -o girl-1118419.eps
 $ ./img2vec publicdomainq-0041064ikt.jpg -c 8 -a -b 12 -o publicdomainq-0041064ikt.eps
+$ ./img2vec publicdomainq-0041064ikt.jpg -o publicdomainq-0041064ikt.svg -svg -a
 $ ./img2vec publicdomainq-0017653mro.jpg -c 5 -a -o publicdomainq-0017653mro.eps
 $ ./img2vec hairdress-4912246.jpg -o hairdress-4912246.svg -svg -a
 

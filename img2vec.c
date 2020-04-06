@@ -48,6 +48,7 @@ int img2vec(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag)
 	//printf("%%!PS-Adobe-3.0 EPSF-3.0\n");
 	//printf("%%%%BoundingBox: 0 0 %d %d\n", w, h);
 	if (!(flag&32)) fprintf(fp, "gsave\n");
+	if (flag&32) fprintf(fp, "<g id=\"#%02x%02x%02x\">\n", r, g, b);
 	potrace_path_t *p = st->plist;
 	potrace_dpoint_t (*c)[3];
 	while (p != NULL) {
@@ -92,6 +93,7 @@ int img2vec(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag)
 //		if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\"/>", r, g, b);
 	}
 	if (!(flag&32)) fprintf(fp, "grestore\n");
+	if (flag&32) fprintf(fp, "</g>\n");
 	//printf("%%EOF\n");
 
 	return 0;
