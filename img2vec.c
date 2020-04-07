@@ -10,6 +10,10 @@
 #include "stb_image_resize.h"
 #include "imgp.h"
 
+#define ACCURACY	"%.2f"
+//#define ACCURACY	"%.3f"
+
+
 #include "potracelib.h"
 int img2vec(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag)
 {
@@ -57,14 +61,14 @@ int img2vec(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag)
 		c = p->curve.c;
 		if (!(flag&32)) fprintf(fp, "%f %f moveto\n", c[n-1][2].x, c[n-1][2].y);
 		//if (flag&32) fprintf(fp, "<path d=\"M%f,%f", c[n-1][2].x, h-c[n-1][2].y);
-		if (flag&32) fprintf(fp, "<path d=\"M%.2f,%.2f", c[n-1][2].x, h-c[n-1][2].y);
+		if (flag&32) fprintf(fp, "<path d=\"M" ACCURACY "," ACCURACY "", c[n-1][2].x, h-c[n-1][2].y);
 		for (int i=0; i<n; i++) {
 			switch (tag[i]) {
 			case POTRACE_CORNER:
 				if (!(flag&32)) fprintf(fp, "%f %f lineto\n", c[i][1].x, c[i][1].y);
 				if (!(flag&32)) fprintf(fp, "%f %f lineto\n", c[i][2].x, c[i][2].y);
 				//if (flag&32) fprintf(fp, " L%f,%f L%f,%f", c[i][1].x, h-c[i][1].y, c[i][2].x, h-c[i][2].y);
-				if (flag&32) fprintf(fp, " L%.2f,%.2f L%.2f,%.2f", c[i][1].x, h-c[i][1].y, c[i][2].x, h-c[i][2].y);
+				if (flag&32) fprintf(fp, " L" ACCURACY "," ACCURACY " L" ACCURACY "," ACCURACY "", c[i][1].x, h-c[i][1].y, c[i][2].x, h-c[i][2].y);
 				break;
 			case POTRACE_CURVETO:
 				if (!(flag&32)) fprintf(fp, "%f %f %f %f %f %f curveto\n",
@@ -72,7 +76,7 @@ int img2vec(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag)
 				       c[i][1].x, c[i][1].y,
 				       c[i][2].x, c[i][2].y);
 				//if (flag&32) fprintf(fp, " C%f,%f %f,%f %f,%f",
-				if (flag&32) fprintf(fp, " C%.2f,%.2f %.2f,%.2f %.2f,%.2f",
+				if (flag&32) fprintf(fp, " C" ACCURACY "," ACCURACY " " ACCURACY "," ACCURACY " " ACCURACY "," ACCURACY "",
 					c[i][0].x, h-c[i][0].y, c[i][1].x, h-c[i][1].y, c[i][2].x, h-c[i][2].y);
 				break;
 			}
@@ -133,7 +137,8 @@ void color_quant(unsigned char *im, int w, int h, int n_colors, char *name, int 
 	FILE *fp = fopen(name, "w");
 	if (!(flag&32)) fprintf(fp, "%%!PS-Adobe-3.0 EPSF-3.0\n");
 	if (!(flag&32)) fprintf(fp, "%%%%BoundingBox: 0 0 %d %d\n", w, h);
-	if (flag&32) fprintf(fp, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%dpx\" height=\"%dpx\" viewBox=\"0 0 %d %d\">\n", w, h, w, h);
+	if (flag&32) fprintf(fp, "<svg id=\"illust\" xmlns=\"http://www.w3.org/2000/svg\" width=\"%dpx\" height=\"%dpx\" viewBox=\"0 0 %d %d\">\n", w, h, w, h);
+	if (flag&32) fprintf(fp, "<!-- Generator: img2vec by Yuichiro Nakada -->");
 	uint8_t *img = malloc(w * h *3*2);
 	for (i=1; i < heap.n; i++) {
 		memset(img, 0, w * h *3);
@@ -222,6 +227,7 @@ int main(int argc, char* argv[])
 	int color = 32;
 	int flag = 0;
 	float scale = 2;
+	int bit = 4;
 
 	if (argc <=1) {
 		usage(stderr, argv);
@@ -243,6 +249,7 @@ int main(int argc, char* argv[])
 			scale = atof(argv[++i]);
 		} else if (!strcmp(argv[i], "-cx")) {
 			flag |= 16;
+			bit = atoi(argv[++i]);
 		} else if (!strcmp(argv[i], "-svg")) {
 			flag |= 32;
 		} else if (!strcmp(argv[i], "-s")) {
@@ -281,19 +288,20 @@ int main(int argc, char* argv[])
 		uint8_t *posterized = malloc(sx*sy *3 *2);
 		stbir_resize_uint8_srgb(pixels, w, h, 0, posterized+sx*sy*3, sx, sy, 0, 3, -1, 0);
 		imgp_filter(posterized+sx*sy*3, sx, sy, posterized, magic_kernel, 4, 1, 0);
-		stbir_resize_uint8_srgb(posterized, sx, sy, 0, /*posterized+sx*sy*3*/pixels, w, h, 0, 3, -1, 0);
-		if (flag&1) stbi_write_jpg("magic.jpg", w, h, 3, /*posterized+sx*sy*3*/pixels, 0);
+		stbir_resize_uint8_srgb(posterized, sx, sy, 0, pixels, w, h, 0, 3, -1, 0);
+		if (flag&1) stbi_write_jpg("magic.jpg", w, h, 3, pixels, 0);
 		free(posterized);
 	}
 	if (flag&16) { // 24bit -> 12bit
 		//imgp_cq24to15(pixels, w, h, 3, pixels, 1);
 		uint8_t *p = pixels;
 		for (int n=0; n<w*h*3; n++) {
-			*p = *p & 0b11110000;
+//			*p = *p & 0b11110000;
+			*p = ((*p)>>bit)<<bit;
 			p++;
 		}
 	}
-	if (flag&64) {
+	if (flag&64) { // scale
 		int sx = w*scale;
 		int sy = h*scale;
 		uint8_t *posterized = malloc(sx*sy *3);

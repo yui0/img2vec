@@ -33,8 +33,8 @@ $ ./img2vec girl-4716186_1920.jpg -o girl-4716186_1920.svg -svg -a -s 0.6 -c 48 
 $ ./img2vec sparkler-677774_1920.jpg -o sparkler-677774.svg -svg -s 0.4 -c 64
 $ ./img2vec 2435687439_17e1f58a9c_o.jpg -o 2435687439_17e1f58a9c_o.svg -svg
 
-$ ./img2vec 1098751.jpg -o 1098751.eps -c 48 -a -cx -b 14
-$ ./img2vec painting-4820485_1920.jpg -o painting-4820485.svg -svg -s 0.3 -c 18 -cx
+$ ./img2vec 1098751.jpg -o 1098751.eps -c 48 -a -cx 4 -b 14
+$ ./img2vec painting-4820485_1920.jpg -o painting-4820485.svg -svg -s 0.3 -c 18 -cx 4
 
 $ ./img2vec night-4926430_1920.jpg -c 16 -o night-4926430.eps
 $ ./img2vec night-4926430_1920.jpg -o night-4926430.svg -svg -s 0.3
