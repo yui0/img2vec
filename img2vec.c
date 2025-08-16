@@ -1,5 +1,5 @@
 /* img2vec: Transforming bitmaps into vector graphics
- *	©2020 Yuichiro Nakada
+ *	©2020,2025 Yuichiro Nakada
  * */
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -7,12 +7,10 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
-#include "stb_image_resize.h"
+#include "stb_image_resize2.h"
 #include "imgp.h"
 
 #define ACCURACY	"%.2f"
-//#define ACCURACY	"%.3f"
-
 
 #include "potracelib.h"
 int img2vec(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag)
@@ -156,8 +154,10 @@ void color_quant(unsigned char *im, int w, int h, int n_colors, char *name, int 
 		}
 		if (flag&1) { // debug
 			char str[256];
-			snprintf(str, sizeof(str), "original_d%02d.bmp", i);
-			stbi_write_bmp(str, w, h, 3, img);
+			//snprintf(str, sizeof(str), "original_d%02d.bmp", i);
+			//stbi_write_bmp(str, w, h, 3, img);
+			snprintf(str, sizeof(str), "original_d%02d.png", i);
+			stbi_write_png(str, w, h, 3, img, 0);
 		}
 		if (flag&4) { // alpha
 			if (got->r==255 && got->g==255 && got->b==255) continue;
@@ -206,6 +206,27 @@ double magic_kernel[4*4] = {
 	1/64.0, 3/64.0, 3/64.0, 1/64.0,
 };
 
+// ガウシアンブラー (ノイズ除去用)
+double gaussian_kernel[3*3] = {
+	1.0/16, 2.0/16, 1.0/16,
+	2.0/16, 4.0/16, 2.0/16,
+	1.0/16, 2.0/16, 1.0/16,
+};
+
+// Sobelエッジ検出 (輪郭検出用、X方向)
+double sobel_x_kernel[3*3] = {
+	-1.0, 0.0, 1.0,
+	-2.0, 0.0, 2.0,
+	-1.0, 0.0, 1.0,
+};
+
+// Sobelエッジ検出 (Y方向)
+double sobel_y_kernel[3*3] = {
+	-1.0, -2.0, -1.0,
+	0.0,  0.0,  0.0,
+	1.0,  2.0,  1.0,
+};
+
 void usage(FILE* fp, char** argv)
 {
 	fprintf(fp,
@@ -216,6 +237,9 @@ void usage(FILE* fp, char** argv)
 		"-svg               Output file type [default: eps]\n"
 		"-c <num>           Reduce color [default: 32]\n"
 		"-b <scale>         Blur image\n"
+		"-n                 Enable noise removal (Gaussian blur)\n"
+		"-e                 Enable edge-preserving blur (blur non-edges)\n"
+		"-r <dimension>     Resize image to specified width or height\n"
 		"\n",
 		argv[0]);
 }
@@ -228,6 +252,9 @@ int main(int argc, char* argv[])
 	int flag = 0;
 	float scale = 2;
 	int bit = 4;
+	int noise_removal = 0;
+	int edge_blur = 0;
+	float resize = 0;
 
 	if (argc <=1) {
 		usage(stderr, argv);
@@ -255,6 +282,12 @@ int main(int argc, char* argv[])
 		} else if (!strcmp(argv[i], "-s")) {
 			flag |= 64;
 			scale = atof(argv[++i]);
+		} else if (!strcmp(argv[i], "-n")) {
+			noise_removal = 1;
+		} else if (!strcmp(argv[i], "-e")) {
+			edge_blur = 1;
+		} else if (!strcmp(argv[i], "-r")) {
+			resize = atof(argv[++i]);
 		} else if (!strcmp(argv[i], "-h")) {
 			usage(stderr, argv);
 			return 0;
@@ -267,31 +300,85 @@ int main(int argc, char* argv[])
 	uint8_t *pixels;
 	int w, h, bpp;
 	pixels = stbi_load(name, &w, &h, &bpp, 3);
-	assert(pixels);
+	//assert(pixels);
+	if (!pixels) {
+		printf("Error loading image: %s\n", stbi_failure_reason());
+		return 1;
+	}
 
-	/*uint8_t *posterized = malloc(w*h*6);
-	_imgp_dilate(pixels, w, h, 3, posterized);
-	stbi_write_jpg("original_dilated.jpg", w, h, 3, posterized, 0);
-	color_quant(&(image_t){w, h, posterized}, 64);
-	stbi_write_bmp("original_d64.bmp", w, h, 3, posterized);
-	free(posterized);*/
-	/*uint8_t *posterized = malloc(w*h*6);
-	memcpy(posterized, pixels, w*h*3);
-	color_quant(&(image_t){w, h, posterized}, 64);
-	stbi_write_bmp("original_d64.bmp", w, h, 3, posterized);
-	_imgp_dilate(posterized, w, h, 3, posterized+w*h*3);
-	stbi_write_jpg("original_dilated.jpg", w, h, 3, posterized+w*h*3, 0);
-	free(posterized);*/
+	// Resize image if -r option is provided
+	if (resize > 0) {
+		int new_w = w * resize;
+		int new_h = h * resize;
+		printf("resized: %dx%d\n", new_w, new_h);
+		uint8_t *resized = malloc(new_w * new_h * 3);
+		stbir_resize_uint8_srgb(pixels, w, h, 0, resized, new_w, new_h, 0, 3);
+		free(pixels);
+		pixels = resized;
+		w = new_w;
+		h = new_h;
+		if (flag&1) stbi_write_jpg("resized.jpg", w, h, 3, pixels, 0);
+	}
+
 	if (flag&8) { // blur
 		int sx = w*scale;	// 2000
 		int sy = h*scale;	// 2800
 		uint8_t *posterized = malloc(sx*sy *3 *2);
-		stbir_resize_uint8_srgb(pixels, w, h, 0, posterized+sx*sy*3, sx, sy, 0, 3, -1, 0);
+		stbir_resize_uint8_srgb(pixels, w, h, 0, posterized+sx*sy*3, sx, sy, 0, 3);
 		imgp_filter(posterized+sx*sy*3, sx, sy, posterized, magic_kernel, 4, 1, 0);
-		stbir_resize_uint8_srgb(posterized, sx, sy, 0, pixels, w, h, 0, 3, -1, 0);
+		stbir_resize_uint8_srgb(posterized, sx, sy, 0, pixels, w, h, 0, 3);
 		if (flag&1) stbi_write_jpg("magic.jpg", w, h, 3, pixels, 0);
 		free(posterized);
 	}
+
+	// ノイズ除去 (Gaussian blur)
+	if (noise_removal) {
+		uint8_t *denoised = malloc(w * h * 3);
+		imgp_filter(pixels, w, h, denoised, gaussian_kernel, 3, 1, 0);  // 3x3 Gaussian
+		memcpy(pixels, denoised, w * h * 3);
+		free(denoised);
+		if (flag&1) stbi_write_jpg("denoised.jpg", w, h, 3, pixels, 0);
+	}
+
+	// 輪郭以外をぼかす (edge-preserving blur)
+	if (edge_blur) {
+		// まず、グレースケールに変換
+		uint8_t *gray = malloc(w * h);
+		imgp_gray(pixels, w, h, w, gray, w);
+
+		// Sobelでエッジ検出 (XとY)
+		uint8_t *edge_x = malloc(w * h * 3);
+		uint8_t *edge_y = malloc(w * h * 3);
+		imgp_filter(pixels, w, h, edge_x, sobel_x_kernel, 3, 1, 0);
+		imgp_filter(pixels, w, h, edge_y, sobel_y_kernel, 3, 1, 0);
+
+		// エッジ強度計算 (簡易的にXとYの絶対値を加算)
+		uint8_t *edges = malloc(w * h);
+		for (int i = 0; i < w * h; i++) {
+			int ex = abs(edge_x[i * 3]);  // Rチャンネルで近似
+			int ey = abs(edge_y[i * 3]);
+			edges[i] = (uint8_t)sqrt(ex * ex + ey * ey);  // 勾配の大きさ
+			if (edges[i] > 255) edges[i] = 255;
+		}
+		free(edge_x);
+		free(edge_y);
+
+		// エッジマスクに基づいて選択的にぼかす (エッジ強度が低い領域をぼかす)
+		uint8_t *blurred = malloc(w * h * 3);
+		imgp_filter(pixels, w, h, blurred, gaussian_kernel, 3, 1, 0);  // 全域ぼかし
+
+		for (int i = 0; i < w * h * 3; i++) {
+			int idx = i / 3;
+			float blend = edges[idx] / 255.0;  // エッジ強度が高いほどオリジナルを保持
+			pixels[i] = (uint8_t)(pixels[i] * blend + blurred[i] * (1 - blend));
+		}
+
+		free(gray);
+		free(edges);
+		free(blurred);
+		if (flag&1) stbi_write_jpg("edge_blurred.jpg", w, h, 3, pixels, 0);
+	}
+
 	if (flag&16) { // 24bit -> 12bit
 		//imgp_cq24to15(pixels, w, h, 3, pixels, 1);
 		uint8_t *p = pixels;
@@ -308,11 +395,11 @@ int main(int argc, char* argv[])
 		if (scale<1) {
 			uint8_t *pix = malloc(w*h *3);
 			imgp_filter(pixels, w, h, pix, magic_kernel, 4, 1, 0);
-			stbir_resize_uint8_srgb(pix, w, h, 0, posterized, sx, sy, 0, 3, -1, 0);
+			stbir_resize_uint8_srgb(pix, w, h, 0, posterized, sx, sy, 0, 3);
 			free(pix);
 		} else {
 			posterized = malloc(sx*sy *3);
-			stbir_resize_uint8_srgb(pixels, w, h, 0, posterized, sx, sy, 0, 3, -1, 0);
+			stbir_resize_uint8_srgb(pixels, w, h, 0, posterized, sx, sy, 0, 3);
 		}
 		free(pixels);
 		pixels = posterized;
@@ -339,3 +426,21 @@ int main(int argc, char* argv[])
 	free(gray);*/
 	stbi_image_free(pixels);
 }
+
+// For Wasm: Exported function (placeholder, implement as needed)
+#ifdef EMSCRIPTEN
+#include <emscripten/emscripten.h>
+EMSCRIPTEN_KEEPALIVE int process_image(uint8_t *data, int size, int colors, double quality) {
+    int w, h, bpp;
+    uint8_t *pixels = stbi_load_from_memory(data, size, &w, &h, &bpp, 3);
+    if (!pixels) return -1;
+    if (w * h > 10000000) { // 10MP limit
+        stbi_image_free(pixels);
+        return -2;
+    }
+    double opttolerance = 1.0 / quality;
+    kmeans_color_quant(pixels, w, h, colors, "output.svg", 32, opttolerance); // SVG output
+    stbi_image_free(pixels);
+    return 0;
+}
+#endif
