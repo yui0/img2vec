@@ -178,6 +178,88 @@ void color_quant(unsigned char *im, int w, int h, int n_colors, char *name, int 
 	free(heap.buf);
 }
 
+void filter_posterize(unsigned char *img, int width, int height, int levels)
+{
+	int step = 256 / levels;
+	for (int i = 0; i < width * height * 3; i++) {
+		unsigned char v = img[i];
+		int newv = (v / step) * step + step / 2;
+		if (newv > 255) newv = 255;
+		img[i] = (unsigned char)newv;
+	}
+}
+
+double dist(unsigned char *img, int i, int j)
+{
+	double dr = (double)img[i]   - (double)img[j];
+	double dg = (double)img[i+1] - (double)img[j+1];
+	double db = (double)img[i+2] - (double)img[j+2];
+	return dr*dr + dg*dg + db*db;
+}
+void filter_kmeans(unsigned char *img, int width, int height, int k, int iterations)
+{
+    int n = width * height;
+    unsigned char *centroids = malloc(k * 3);
+    int *labels = malloc(n * sizeof(int));
+
+    // 初期重心をランダムに選ぶ
+    for (int c = 0; c < k; c++) {
+        int idx = (rand() % n) * 3;
+        centroids[c*3+0] = img[idx+0];
+        centroids[c*3+1] = img[idx+1];
+        centroids[c*3+2] = img[idx+2];
+    }
+
+    for (int it = 0; it < iterations; it++) {
+        // 割り当て
+        for (int p = 0; p < n; p++) {
+            double bestd = 1e12;
+            int bestc = 0;
+            for (int c = 0; c < k; c++) {
+                double dr = (double)img[p*3+0] - (double)centroids[c*3+0];
+                double dg = (double)img[p*3+1] - (double)centroids[c*3+1];
+                double db = (double)img[p*3+2] - (double)centroids[c*3+2];
+                double d = dr*dr + dg*dg + db*db;
+                if (d < bestd) { bestd = d; bestc = c; }
+            }
+            labels[p] = bestc;
+        }
+
+        // 重心更新
+        long *sumr = calloc(k, sizeof(long));
+        long *sumg = calloc(k, sizeof(long));
+        long *sumb = calloc(k, sizeof(long));
+        int *count = calloc(k, sizeof(int));
+
+        for (int p = 0; p < n; p++) {
+            int c = labels[p];
+            sumr[c] += img[p*3+0];
+            sumg[c] += img[p*3+1];
+            sumb[c] += img[p*3+2];
+            count[c]++;
+        }
+        for (int c = 0; c < k; c++) {
+            if (count[c] > 0) {
+                centroids[c*3+0] = sumr[c] / count[c];
+                centroids[c*3+1] = sumg[c] / count[c];
+                centroids[c*3+2] = sumb[c] / count[c];
+            }
+        }
+        free(sumr); free(sumg); free(sumb); free(count);
+    }
+
+    // ピクセルを代表色に置換
+    for (int p = 0; p < n; p++) {
+        int c = labels[p];
+        img[p*3+0] = centroids[c*3+0];
+        img[p*3+1] = centroids[c*3+1];
+        img[p*3+2] = centroids[c*3+2];
+    }
+
+    free(centroids);
+    free(labels);
+}
+
 /*double emboss_kernel[3*3] = {
   -2., -1.,  0.,
   -1.,  1.,  1.,
@@ -230,18 +312,25 @@ double sobel_y_kernel[3*3] = {
 void usage(FILE* fp, char** argv)
 {
 	fprintf(fp,
-		"Usage: %s [options] file\n\n"
-		"Options:\n"
-		"-h                 Print this message\n"
-		"-o <output name>   Output file name [default: img2vec.eps]\n"
-		"-svg               Output file type [default: eps]\n"
-		"-c <num>           Reduce color [default: 32]\n"
-		"-b <scale>         Blur image\n"
-		"-n                 Enable noise removal (Gaussian blur)\n"
-		"-e                 Enable edge-preserving blur (blur non-edges)\n"
-		"-r <dimension>     Resize image to specified width or height\n"
-		"\n",
-		argv[0]);
+	"Usage: %s [options] file\n\n"
+	"Options:\n"
+	"-h                 Print this message\n"
+	"-o <output name>   Output file name [default: img2vec.eps]\n"
+	"-svg               Output file type as SVG [default: eps]\n"
+	"-c <num>           Reduce color [default: 32]\n"
+	"-b <scale>         Blur image with specified scale\n"
+	"-n                 Enable noise removal (Gaussian blur)\n"
+	"-e                 Enable edge-preserving blur (blur non-edges)\n"
+	"-r <dimension>     Resize image to specified width or height\n"
+	"-d                 Enable debug mode\n"
+	"-x                 Enable dilation\n"
+	"-a                 Enable alpha channel processing\n"
+	"-cx <num>          Enable custom bit processing with specified bit value\n"
+	"-s <scale>         Apply scaling with specified scale\n"
+	"-posterize <num>   Apply posterization with specified levels\n"
+	"-kmeans <num>      Apply k-means clustering with specified number of colors\n"
+	"\n",
+	argv[0]);
 }
 
 int main(int argc, char* argv[])
@@ -255,6 +344,8 @@ int main(int argc, char* argv[])
 	int noise_removal = 0;
 	int edge_blur = 0;
 	float resize = 0;
+	int levels = 0;
+	int colors = 0;
 
 	if (argc <=1) {
 		usage(stderr, argv);
@@ -288,6 +379,10 @@ int main(int argc, char* argv[])
 			edge_blur = 1;
 		} else if (!strcmp(argv[i], "-r")) {
 			resize = atof(argv[++i]);
+		} else if (!strcmp(argv[i], "-posterize")) {
+			levels = atof(argv[++i]);
+		} else if (!strcmp(argv[i], "-kmeans")) {
+			colors = atof(argv[++i]);
 		} else if (!strcmp(argv[i], "-h")) {
 			usage(stderr, argv);
 			return 0;
@@ -319,6 +414,9 @@ int main(int argc, char* argv[])
 		h = new_h;
 		if (flag&1) stbi_write_jpg("resized.jpg", w, h, 3, pixels, 0);
 	}
+
+	if (levels>0) filter_posterize(pixels, w, h, levels);
+	if (colors>0) filter_kmeans(pixels, w, h, colors, 10);
 
 	if (flag&8) { // blur
 		int sx = w*scale;	// 2000
