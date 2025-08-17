@@ -13,121 +13,100 @@
 #define ACCURACY	"%.2f"
 
 #include "potracelib.h"
-int img2vec(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag, int turdsize, double alphamax, double opttolerance)
+int img2vec(FILE *fp, uint8_t *s, int w, int h, int r, int g, int b, int flag)
 {
+	// create a bitmap
 	potrace_bitmap_t *bm = bm_new(w, h);
 	if (!bm) {
 		fprintf(stderr, "Error allocating bitmap: %s\n", strerror(errno));
 		return 1;
 	}
 
-	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) {
-			int n = ((h - y - 1) * w + x) * 3; // Y座標反転
-			int c = (s[n] == r && s[n + 1] == g && s[n + 2] == b) ? 255 : 0;
+	for (int y=0; y<h; y++) {
+		for (int x=0; x<w; x++) {
+			int n = ((h-y)*w+x)*3;
+			//int c = (s[n]||s[n+1]||s[n+2] ? 255 : 0);
+			int c = (s[n] == r && s[n+1] == g && s[n+2] == b ? 255 : 0);
 			BM_PUT(bm, x, y, c);
 		}
 	}
 
+	// set tracing parameters, starting from defaults
 	potrace_param_t *param = potrace_param_default();
 	if (!param) {
 		fprintf(stderr, "Error allocating parameters: %s\n", strerror(errno));
-		bm_free(bm);
 		return 1;
 	}
-	param->turdsize = turdsize;
-	param->alphamax = alphamax;
-	param->opttolerance = opttolerance;
+	param->turdsize = 2;        // 小さなパスを除去
+	param->alphamax = 1.0;      // 滑らかなエッジ
+	param->opttolerance = 0.2;  // カーブの最適化
 
+	// trace the bitmap
 	potrace_state_t *st = potrace_trace(param, bm);
 	if (!st || st->status != POTRACE_STATUS_OK) {
-		fprintf(stderr, "Error tracing bitmap\n");
-		bm_free(bm);
-		potrace_param_free(param);
+		fprintf(stderr, "Error tracing bitmap: %s\n", strerror(errno));
 		return 1;
 	}
 	bm_free(bm);
 
+	// output vector data, e.g. as a rudimentary EPS file
+	//printf("%%!PS-Adobe-3.0 EPSF-3.0\n");
+	//printf("%%%%BoundingBox: 0 0 %d %d\n", w, h);
+	if (!(flag&32)) fprintf(fp, "gsave\n");
+	if (flag&32) fprintf(fp, "<g id=\"#%02x%02x%02x\">\n", r, g, b);
 	potrace_path_t *p = st->plist;
-	if (flag & 32) { // SVG出力
-		fprintf(fp, "<g id=\"%02x%02x%02x\">\n", r, g, b);
-		// 同じ色の全パスを単一の<path>要素にまとめる
-		fprintf(fp, "<path fill=\"#%02x%02x%02x\" fill-rule=\"evenodd\" d=\"", r, g, b);
-
-		while (p != NULL) {
-			int n = p->curve.n;
-			potrace_dpoint_t (*c)[3] = p->curve.c;
-			int *tag = p->curve.tag;
-
-			if (n == 0) { // 空のパスをスキップ
-				p = p->next;
-				continue;
+	potrace_dpoint_t (*c)[3];
+	while (p != NULL) {
+		int n = p->curve.n;
+		int *tag = p->curve.tag;
+		c = p->curve.c;
+		if (!(flag&32)) fprintf(fp, "%f %f moveto\n", c[n-1][2].x, c[n-1][2].y);
+		//if (flag&32) fprintf(fp, "<path d=\"M%f,%f", c[n-1][2].x, h-c[n-1][2].y);
+		if (flag&32) fprintf(fp, "<path d=\"M" ACCURACY "," ACCURACY "", c[n-1][2].x, h-c[n-1][2].y);
+		for (int i=0; i<n; i++) {
+			switch (tag[i]) {
+			case POTRACE_CORNER:
+				if (!(flag&32)) fprintf(fp, "%f %f lineto\n", c[i][1].x, c[i][1].y);
+				if (!(flag&32)) fprintf(fp, "%f %f lineto\n", c[i][2].x, c[i][2].y);
+				//if (flag&32) fprintf(fp, " L%f,%f L%f,%f", c[i][1].x, h-c[i][1].y, c[i][2].x, h-c[i][2].y);
+				if (flag&32) fprintf(fp, " L" ACCURACY "," ACCURACY " L" ACCURACY "," ACCURACY "", c[i][1].x, h-c[i][1].y, c[i][2].x, h-c[i][2].y);
+				break;
+			case POTRACE_CURVETO:
+				if (!(flag&32)) fprintf(fp, "%f %f %f %f %f %f curveto\n",
+				       c[i][0].x, c[i][0].y,
+				       c[i][1].x, c[i][1].y,
+				       c[i][2].x, c[i][2].y);
+				//if (flag&32) fprintf(fp, " C%f,%f %f,%f %f,%f",
+				if (flag&32) fprintf(fp, " C" ACCURACY "," ACCURACY " " ACCURACY "," ACCURACY " " ACCURACY "," ACCURACY "",
+					c[i][0].x, h-c[i][0].y, c[i][1].x, h-c[i][1].y, c[i][2].x, h-c[i][2].y);
+				break;
 			}
-
-			// サブパスの開始 (Move to)
-			fprintf(fp, "M" ACCURACY "," ACCURACY, c[n - 1][2].x, h - c[n - 1][2].y);
-
-			// パスセグメントの生成
-			for (int i = 0; i < n; i++) {
-				switch (tag[i]) {
-				case POTRACE_CORNER:
-					fprintf(fp, " L" ACCURACY "," ACCURACY " L" ACCURACY "," ACCURACY,
-						c[i][1].x, h - c[i][1].y, c[i][2].x, h - c[i][2].y);
-					break;
-				case POTRACE_CURVETO:
-					fprintf(fp, " C" ACCURACY "," ACCURACY " " ACCURACY "," ACCURACY " " ACCURACY "," ACCURACY,
-						c[i][0].x, h - c[i][0].y, c[i][1].x, h - c[i][1].y, c[i][2].x, h - c[i][2].y);
-					break;
-				}
-			}
-			// サブパスを閉じる
-			fprintf(fp, " Z");
-			p = p->next;
 		}
-		// 単一の<path>要素を閉じる
-		fprintf(fp, "\"/>\n");
-		fprintf(fp, "</g>\n");
-
-	} else { // EPS出力
-		fprintf(fp, "gsave\n");
-		
-		while (p != NULL) {
-			int n = p->curve.n;
-			potrace_dpoint_t (*c)[3] = p->curve.c;
-			int *tag = p->curve.tag;
-
-			if (n == 0) { // 空のパスをスキップ
-				p = p->next;
-				continue;
-			}
-			
-			// パスセグメントの描画コマンドのみ出力
-			fprintf(fp, "%f %f moveto\n", c[n-1][2].x, c[n-1][2].y);
-			for (int i=0; i<n; i++) {
-				switch (tag[i]) {
-				case POTRACE_CORNER:
-					fprintf(fp, "%f %f lineto\n", c[i][1].x, c[i][1].y);
-					fprintf(fp, "%f %f lineto\n", c[i][2].x, c[i][2].y);
-					break;
-				case POTRACE_CURVETO:
-					fprintf(fp, "%f %f %f %f %f %f curveto\n",
-							c[i][0].x, c[i][0].y, c[i][1].x, c[i][1].y, c[i][2].x, c[i][2].y);
-					break;
-				}
-			}
-			p = p->next;
+		/* at the end of a group of a positive path and its negative
+		   children, fill. */
+		if (p->next == NULL || p->next->sign == '+') {
+			//printf("0 setgray fill\n");
+			if (!(flag&32)) fprintf(fp, "%f %f %f setrgbcolor fill\n", r/255.0, g/255.0, b/255.0);
+//			if (flag&32) fprintf(fp, "\" stroke=\"#%02x%02x%02x\"/>", r, g, b);
+//		} else {
+//			if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\"/>", r, g, b);
 		}
-		// 全てのパスを描画後、一度だけ色を指定して塗りつぶす
-		fprintf(fp, "%f %f %f setrgbcolor fill\n", r / 255.0, g / 255.0, b / 255.0);
-		fprintf(fp, "grestore\n");
+		p = p->next;
+		if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\" stroke=\"#%02x%02x%02x", r, g, b, r, g, b);
+		if (flag&32) fprintf(fp, "\"/>\n");
+//		if (flag&32) fprintf(fp, "\" stroke=\"#%02x%02x%02x\"/>", r, g, b);
+//		if (flag&32) fprintf(fp, "\" fill=\"#%02x%02x%02x\"/>", r, g, b);
 	}
-	
+	if (!(flag&32)) fprintf(fp, "grestore\n");
+	if (flag&32) fprintf(fp, "</g>\n");
+	//printf("%%EOF\n");
+
 	potrace_state_free(st);
 	potrace_param_free(param);
 	return 0;
 }
 
-void color_quant(unsigned char *im, int w, int h, int n_colors, char *name, int flag, int turdsize, double alphamax, double opttolerance)
+void color_quant(unsigned char *im, int w, int h, int n_colors, char *name, int flag)
 {
 	int i;
 	unsigned char *pix = im;
@@ -156,6 +135,7 @@ void color_quant(unsigned char *im, int w, int h, int n_colors, char *name, int 
 		color_replace(root, pix);
 	}
 
+	// output
 	if (flag&1) stbi_write_jpg("posterized.jpg", w, h, 3, im, 0);
 	FILE *fp = fopen(name, "w");
 	if (!(flag&32)) fprintf(fp, "%%!PS-Adobe-3.0 EPSF-3.0\n");
@@ -172,21 +152,26 @@ void color_quant(unsigned char *im, int w, int h, int n_colors, char *name, int 
 				img[n*3] = got->r;
 				img[n*3+1] = got->g;
 				img[n*3+2] = got->b;
+				/*img[n*3] = 255;
+				img[n*3+1] = 255;
+				img[n*3+2] = 255;*/
 			}
 		}
-		if (flag&1) {
+		if (flag&1) { // debug
 			char str[256];
+			//snprintf(str, sizeof(str), "original_d%02d.bmp", i);
+			//stbi_write_bmp(str, w, h, 3, img);
 			snprintf(str, sizeof(str), "original_d%02d.png", i);
 			stbi_write_png(str, w, h, 3, img, 0);
 		}
-		if (flag&4) {
+		if (flag&4) { // alpha
 			if (got->r==255 && got->g==255 && got->b==255) continue;
 		}
-		if (flag&2) {
+		if (flag&2) { // dilate
 			imgp_dilate(img, w, h, 3, img+w * h *3);
-			img2vec(fp, img+w * h *3, w, h, got->r, got->g, got->b, flag, turdsize, alphamax, opttolerance);
+			img2vec(fp, img+w * h *3, w, h, got->r, got->g, got->b, flag);
 		} else {
-			img2vec(fp, img, w, h, got->r, got->g, got->b, flag, turdsize, alphamax, opttolerance);
+			img2vec(fp, img, w, h, got->r, got->g, got->b, flag);
 		}
 	}
 	free(img);
@@ -216,13 +201,13 @@ double dist(unsigned char *img, int i, int j)
 	double db = (double)img[i+2] - (double)img[j+2];
 	return dr*dr + dg*dg + db*db;
 }
-
 void filter_kmeans(unsigned char *img, int width, int height, int k, int iterations)
 {
     int n = width * height;
     unsigned char *centroids = malloc(k * 3);
     int *labels = malloc(n * sizeof(int));
 
+    // 初期重心をランダムに選ぶ
     for (int c = 0; c < k; c++) {
         int idx = (rand() % n) * 3;
         centroids[c*3+0] = img[idx+0];
@@ -231,6 +216,7 @@ void filter_kmeans(unsigned char *img, int width, int height, int k, int iterati
     }
 
     for (int it = 0; it < iterations; it++) {
+        // 割り当て
         for (int p = 0; p < n; p++) {
             double bestd = 1e12;
             int bestc = 0;
@@ -244,6 +230,7 @@ void filter_kmeans(unsigned char *img, int width, int height, int k, int iterati
             labels[p] = bestc;
         }
 
+        // 重心更新
         long *sumr = calloc(k, sizeof(long));
         long *sumg = calloc(k, sizeof(long));
         long *sumb = calloc(k, sizeof(long));
@@ -266,6 +253,7 @@ void filter_kmeans(unsigned char *img, int width, int height, int k, int iterati
         free(sumr); free(sumg); free(sumb); free(count);
     }
 
+    // ピクセルを代表色に置換
     for (int p = 0; p < n; p++) {
         int c = labels[p];
         img[p*3+0] = centroids[c*3+0];
@@ -277,6 +265,27 @@ void filter_kmeans(unsigned char *img, int width, int height, int k, int iterati
     free(labels);
 }
 
+/*double emboss_kernel[3*3] = {
+  -2., -1.,  0.,
+  -1.,  1.,  1.,
+  0.,  1.,  2.,
+};
+double sharpen_kernel[3*3] = {
+  -1.0, -1.0, -1.0,
+  -1.0,  9.0, -1.0,
+  -1.0, -1.0, -1.0
+};
+double sobel_emboss_kernel[3*3] = { offset+0.5
+  -1., -2., -1.,
+  0.,  0.,  0.,
+  1.,  2.,  1.,
+};
+double box_blur_kernel[3*3] = {
+  1.0/9, 1.0/9, 1.0/9,
+  1.0/9, 1.0/9, 1.0/9,
+  1.0/9, 1.0/9, 1.0/9,
+};*/
+// https://postd.cc/the-magic-kernel/
 double magic_kernel[4*4] = {
 	1/64.0, 3/64.0, 3/64.0, 1/64.0,
 	3/64.0, 9/64.0, 9/64.0, 3/64.0,
@@ -284,18 +293,21 @@ double magic_kernel[4*4] = {
 	1/64.0, 3/64.0, 3/64.0, 1/64.0,
 };
 
+// ガウシアンブラー (ノイズ除去用)
 double gaussian_kernel[3*3] = {
 	1.0/16, 2.0/16, 1.0/16,
 	2.0/16, 4.0/16, 2.0/16,
 	1.0/16, 2.0/16, 1.0/16,
 };
 
+// Sobelエッジ検出 (輪郭検出用、X方向)
 double sobel_x_kernel[3*3] = {
 	-1.0, 0.0, 1.0,
 	-2.0, 0.0, 2.0,
 	-1.0, 0.0, 1.0,
 };
 
+// Sobelエッジ検出 (Y方向)
 double sobel_y_kernel[3*3] = {
 	-1.0, -2.0, -1.0,
 	0.0,  0.0,  0.0,
@@ -322,9 +334,6 @@ void usage(FILE* fp, char** argv)
 	"-s <scale>         Apply scaling with specified scale\n"
 	"-posterize <num>   Apply posterization with specified levels\n"
 	"-kmeans <num>      Apply k-means clustering with specified number of colors\n"
-	"-turd <num>        Set turdsize for potrace (removes small paths) [default: 2]\n"
-	"-alpha <num>       Set alphamax for potrace (edge smoothness) [default: 1.0]\n"
-	"-opttol <num>      Set opttolerance for potrace (curve optimization) [default: 0.2]\n"
 	"\n",
 	argv[0]);
 }
@@ -342,9 +351,6 @@ int main(int argc, char* argv[])
 	float resize = 0;
 	int levels = 0;
 	int colors = 0;
-	int turdsize = 2;
-	double alphamax = 1.0;
-	double opttolerance = 0.2;
 
 	if (argc <=1) {
 		usage(stderr, argv);
@@ -382,28 +388,25 @@ int main(int argc, char* argv[])
 			levels = atof(argv[++i]);
 		} else if (!strcmp(argv[i], "-kmeans")) {
 			colors = atof(argv[++i]);
-		} else if (!strcmp(argv[i], "-turd")) {
-			turdsize = atoi(argv[++i]);
-		} else if (!strcmp(argv[i], "-alpha")) {
-			alphamax = atof(argv[++i]);
-		} else if (!strcmp(argv[i], "-opttol")) {
-			opttolerance = atof(argv[++i]);
 		} else if (!strcmp(argv[i], "-h")) {
 			usage(stderr, argv);
 			return 0;
 		} else {
 			name = argv[i];
+			//printf("%s\n", name);
 		}
 	}
 
 	uint8_t *pixels;
 	int w, h, bpp;
 	pixels = stbi_load(name, &w, &h, &bpp, 3);
+	//assert(pixels);
 	if (!pixels) {
 		printf("Error loading image: %s\n", stbi_failure_reason());
 		return 1;
 	}
 
+	// Resize image if -r option is provided
 	if (resize > 0) {
 		int new_w = w * resize;
 		int new_h = h * resize;
@@ -420,9 +423,9 @@ int main(int argc, char* argv[])
 	if (levels>0) filter_posterize(pixels, w, h, levels);
 	if (colors>0) filter_kmeans(pixels, w, h, colors, 10);
 
-	if (flag&8) {
-		int sx = w*scale;
-		int sy = h*scale;
+	if (flag&8) { // blur
+		int sx = w*scale;	// 2000
+		int sy = h*scale;	// 2800
 		uint8_t *posterized = malloc(sx*sy *3 *2);
 		stbir_resize_uint8_srgb(pixels, w, h, 0, posterized+sx*sy*3, sx, sy, 0, 3);
 		imgp_filter(posterized+sx*sy*3, sx, sy, posterized, magic_kernel, 4, 1, 0);
@@ -431,51 +434,64 @@ int main(int argc, char* argv[])
 		free(posterized);
 	}
 
+	// ノイズ除去 (Gaussian blur)
 	if (noise_removal) {
 		uint8_t *denoised = malloc(w * h * 3);
-		imgp_filter(pixels, w, h, denoised, gaussian_kernel, 3, 1, 0);
+		imgp_filter(pixels, w, h, denoised, gaussian_kernel, 3, 1, 0);  // 3x3 Gaussian
 		memcpy(pixels, denoised, w * h * 3);
 		free(denoised);
 		if (flag&1) stbi_write_jpg("denoised.jpg", w, h, 3, pixels, 0);
 	}
 
+	// 輪郭以外をぼかす (edge-preserving blur)
 	if (edge_blur) {
+		// まず、グレースケールに変換
 		uint8_t *gray = malloc(w * h);
 		imgp_gray(pixels, w, h, w, gray, w);
+
+		// Sobelでエッジ検出 (XとY)
 		uint8_t *edge_x = malloc(w * h * 3);
 		uint8_t *edge_y = malloc(w * h * 3);
 		imgp_filter(pixels, w, h, edge_x, sobel_x_kernel, 3, 1, 0);
 		imgp_filter(pixels, w, h, edge_y, sobel_y_kernel, 3, 1, 0);
+
+		// エッジ強度計算 (簡易的にXとYの絶対値を加算)
 		uint8_t *edges = malloc(w * h);
 		for (int i = 0; i < w * h; i++) {
-			int ex = abs(edge_x[i * 3]);
+			int ex = abs(edge_x[i * 3]);  // Rチャンネルで近似
 			int ey = abs(edge_y[i * 3]);
-			edges[i] = (uint8_t)sqrt(ex * ex + ey * ey);
+			edges[i] = (uint8_t)sqrt(ex * ex + ey * ey);  // 勾配の大きさ
 			if (edges[i] > 255) edges[i] = 255;
 		}
 		free(edge_x);
 		free(edge_y);
+
+		// エッジマスクに基づいて選択的にぼかす (エッジ強度が低い領域をぼかす)
 		uint8_t *blurred = malloc(w * h * 3);
-		imgp_filter(pixels, w, h, blurred, gaussian_kernel, 3, 1, 0);
+		imgp_filter(pixels, w, h, blurred, gaussian_kernel, 3, 1, 0);  // 全域ぼかし
+
 		for (int i = 0; i < w * h * 3; i++) {
 			int idx = i / 3;
-			float blend = edges[idx] / 255.0;
+			float blend = edges[idx] / 255.0;  // エッジ強度が高いほどオリジナルを保持
 			pixels[i] = (uint8_t)(pixels[i] * blend + blurred[i] * (1 - blend));
 		}
+
 		free(gray);
 		free(edges);
 		free(blurred);
 		if (flag&1) stbi_write_jpg("edge_blurred.jpg", w, h, 3, pixels, 0);
 	}
 
-	if (flag&16) {
+	if (flag&16) { // 24bit -> 12bit
+		//imgp_cq24to15(pixels, w, h, 3, pixels, 1);
 		uint8_t *p = pixels;
 		for (int n=0; n<w*h*3; n++) {
+//			*p = *p & 0b11110000;
 			*p = ((*p)>>bit)<<bit;
 			p++;
 		}
 	}
-	if (flag&64) {
+	if (flag&64) { // scale
 		int sx = w*scale;
 		int sy = h*scale;
 		uint8_t *posterized = malloc(sx*sy *3);
@@ -493,23 +509,40 @@ int main(int argc, char* argv[])
 		w = sx;
 		h = sy;
 	}
-	color_quant(pixels, w, h, color, outfile, flag, turdsize, alphamax, opttolerance);
+	color_quant(pixels, w, h, color, outfile, flag);
 
+/*	uint8_t *gray = malloc(w*h*4);
+	uint8_t *dilated = gray+w*h;
+	uint8_t *diff = gray+w*h*2;
+	uint8_t *contour = gray+w*h*3;
+	imgp_gray(pixels, w, h, w, gray, w);
+	color_quant(pixels, w, h, color, outfile, flag);
+	//stbi_write_bmp("original64.bmp", w, h, 3, pixels);
+	//stbi_write_bmp("gray.bmp", w, h, 1, gray);
+	imgp_dilate(gray, w, h, 1, dilated);
+	//stbi_write_jpg("dilated.jpg", w, h, 1, dilated, 0);
+	imgp_absdiff(gray, dilated, w, h, diff);
+	//stbi_write_jpg("diff.jpg", w, h, 1, diff, 0);
+	imgp_reverse(diff, w, h, contour);
+	//stbi_write_jpg("contour.jpg", w, h, 1, contour, 0);
+	//stbi_write_bmp("contour.bmp", w, h, 1, contour);
+	free(gray);*/
 	stbi_image_free(pixels);
 }
 
+// For Wasm: Exported function (placeholder, implement as needed)
 #ifdef EMSCRIPTEN
 #include <emscripten/emscripten.h>
 EMSCRIPTEN_KEEPALIVE int process_image(uint8_t *data, int size, int colors, double quality) {
     int w, h, bpp;
     uint8_t *pixels = stbi_load_from_memory(data, size, &w, &h, &bpp, 3);
     if (!pixels) return -1;
-    if (w * h > 10000000) {
+    if (w * h > 10000000) { // 10MP limit
         stbi_image_free(pixels);
         return -2;
     }
     double opttolerance = 1.0 / quality;
-    color_quant(pixels, w, h, colors, "output.svg", 32, 2, 1.0, opttolerance);
+    kmeans_color_quant(pixels, w, h, colors, "output.svg", 32, opttolerance); // SVG output
     stbi_image_free(pixels);
     return 0;
 }
