@@ -8,6 +8,18 @@ Transform bitmaps into stunning vector graphics! 🖼️➡️📐
 $ make
 ```
 
+```
+$ emcc img2vec.c -o img2vec.js \
+  -s ALLOW_MEMORY_GROWTH=1 \
+  -s EXPORTED_FUNCTIONS="['_main', '_process_image', '_malloc', '_free']" \
+  -s EXPORTED_RUNTIME_METHODS="['ccall', 'cwrap', 'FS', 'HEAPU8']" \
+  -s MODULARIZE=1 \
+  -s EXPORT_ES6=1 \
+  -s ENVIRONMENT=web \
+  -fopenmp \
+  -Os
+```
+
 ## How to Use 🚀
 
 ```

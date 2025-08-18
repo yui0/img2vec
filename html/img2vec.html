@@ -1,26 +1,178 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Img2Vec: Image to Vector Graphics</title>
-    <link rel="icon" href="data:,"> <!-- Suppress favicon error -->
+    <title>Img2Vec: Convert Image to Vector (SVG)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&family=Caveat:wght@400&display=swap" rel="stylesheet">
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
-        #preview, #result { max-width: 500px; margin: 20px auto; }
-        button { padding: 10px 20px; }
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #f9e1e9 0%, #e1f0fa 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: #ffffff;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+            max-width: 900px;
+            width: 100%;
+        }
+        h1 {
+            font-family: 'Caveat', cursive;
+            font-size: 2.5rem;
+            color: #ff6f91;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            font-size: 1rem;
+            color: #6b7280;
+            margin-bottom: 5px;
+            display: block;
+        }
+        input[type="file"], input[type="number"], input[type="range"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ffd1dc;
+            border-radius: 10px;
+            background: #fff0f5;
+            transition: border-color 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #ff6f91;
+        }
+        button {
+            background: #ff6f91;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #ff4d73;
+        }
+        .preview-container, .output-container {
+            border: 2px dashed #d1d5db;
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+            background: #f9fafb;
+        }
+        .preview-container img, .output-container object {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        input[type="checkbox"] {
+            accent-color: #ff6f91;
+        }
     </style>
 </head>
 <body>
-    <h1>Img2Vec: Convert Image to Vector (SVG)</h1>
-    <input type="file" id="imageUpload" accept="image/*">
-    <br>
-    <img id="preview" alt="Preview">
-    <br>
-    <button id="convertBtn" disabled>Convert to SVG</button>
-    <br>
-    <div id="result"></div>
-    <a id="downloadLink" style="display: none;">Download SVG</a>
+    <div class="container">
+        <h1>✨ Img2Vec: Turn Your Pics into Cute Vectors! ✨</h1>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <h2 class="text-lg font-semibold text-pink-600 mb-4">🎀 Options</h2>
+                <div class="input-group">
+                    <label for="imageInput">Select Your Image 💖</label>
+                    <input type="file" id="imageInput" accept="image/*">
+                </div>
+                <div class="input-group">
+                    <label for="numColors">Number of Colors (1-256) 🌈</label>
+                    <input type="number" id="colors" min="1" max="256" value="16">
+                </div>
+                <div class="input-group">
+                    <label for="turdsize">Turdsize (Small Path Removal, 0-100) 🧹</label>
+                    <input type="number" id="turdsize" min="0" max="100" value="2">
+                </div>
+                <div class="input-group">
+                    <label for="alphamax">Alphamax (Edge Smoothness, 0-1.33) 🌟</label>
+                    <input type="number" id="alphamax" min="0" max="1.33" step="0.01" value="1">
+                </div>
+                <div class="input-group">
+                    <label for="opttolerance">Opttolerance (Curve Optimization, 0-2) 🌀</label>
+                    <input type="number" id="opttolerance" min="0" max="2" step="0.01" value="0.2">
+                </div>
+                <div class="input-group">
+                    <label for="resizeFactor">Resize Factor (0.1-10) 📏</label>
+                    <input type="number" id="resize" min="0.1" max="10" step="0.1" value="1">
+                </div>
+                <div class="input-group">
+                    <label for="posterizeLevels">Posterize Levels (0 to disable, 2-256) 🎨</label>
+                    <input type="number" id="posterize" min="0" max="256" value="0">
+                </div>
+                <div class="input-group">
+                    <label for="kmeansColors">K-Means Colors (0 to disable, 2-256) 🌼</label>
+                    <input type="number" id="kmeans" min="0" max="256" value="0">
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enableBlur">
+                    <label for="enableBlur">Enable Blur 🌫️</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enableNoiseRemoval">
+                    <label for="enableNoiseRemoval">Enable Noise Removal (Gaussian Blur) 🧼</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enableEdgePreservingBlur">
+                    <label for="enableEdgePreservingBlur">Enable Edge-Preserving Blur 🖼️</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enableDilation">
+                    <label for="enableDilation">Enable Dilation 🔍</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enableAlphaProcessing">
+                    <label for="enableAlphaProcessing">Enable Alpha Channel Processing 🌐</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="enableDebug">
+                    <label for="enableDebug">Enable Debug Mode (Saves intermediate images) 🛠️</label>
+                </div>
+                <div class="flex gap-4 mt-4">
+                    <button id="convertButton">Convert to SVG 🎉</button>
+                    <button id="downloadButton" disabled>Download SVG 💾</button>
+                    <p id="status" class="text-sm font-semibold text-gray-500"></p>
+                </div>
+            </div>
+            <div>
+                <h2 class="text-lg font-semibold text-pink-600 mb-4">📸 Image Preview</h2>
+<div class="preview-container h-96 overflow-y-auto">
+    <canvas id="previewCanvas"></canvas>
+</div>
+                <!--<div class="preview-container">
+                    <canvas id="previewCanvas"></canvas>
+                </div>-->
+                <h2 class="text-lg font-semibold text-pink-600 mt-6 mb-4">🎨 SVG Output</h2>
+<div class="output-container h-96 overflow-y-auto">
+    <object id="svgOutput" type="image/svg+xml"></object>
+</div>
+                <!--<div class="output-container">
+                    <object id="svgOutput" type="image/svg+xml"></object>
+                </div>-->
+            </div>
+        </div>
+    </div>
 
     <script type="module">
         // Import the Emscripten module
@@ -42,7 +194,7 @@
                 }
                 window.Module = Module;
                 console.log('Initialized Module:', Module);
-                document.getElementById('convertBtn').disabled = false;
+                //document.getElementById('convertBtn').disabled = false;
                 console.log('WebAssembly module loaded successfully');
             } catch (err) {
                 console.error('Failed to initialize WebAssembly module:', err);
@@ -51,70 +203,130 @@
         }
         initModule();
 
-        document.getElementById('imageUpload').addEventListener('change', (e) => {
-            const file = e.target.files[0];
+        const imageInput = document.getElementById('imageInput');
+        const previewCanvas = document.getElementById('previewCanvas');
+        const svgOutput = document.getElementById('svgOutput');
+        const convertButton = document.getElementById('convertButton');
+        const downloadButton = document.getElementById('downloadButton');
+        const status = document.getElementById('status');
+        const blurCheckbox = document.getElementById('enableBlur');
+        const blurScaleInput = document.getElementById('blurScale');
+
+        blurCheckbox.addEventListener('change', () => {
+            blurScaleInput.disabled = !blurCheckbox.checked;
+        });
+
+        imageInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
             if (file) {
                 const reader = new FileReader();
-                reader.onload = (event) => {
-                    document.getElementById('preview').src = event.target.result;
+                reader.onload = (e) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        previewCanvas.width = img.width;
+                        previewCanvas.height = img.height;
+                        const ctx = previewCanvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                    };
+                    img.src = e.target.result;
                 };
                 reader.readAsDataURL(file);
             }
         });
 
-        document.getElementById('convertBtn').addEventListener('click', async () => {
-            if (!window.Module) {
-                return alert('WebAssembly module not loaded yet!');
+        convertButton.addEventListener('click', () => {
+            const file = imageInput.files[0];
+            if (!file) {
+                status.textContent = 'Please select an image.';
+                return;
             }
-            const file = document.getElementById('imageUpload').files[0];
-            if (!file) return alert('Upload an image first!');
 
-            try {
-                const arrayBuffer = await file.arrayBuffer();
+            status.textContent = 'Processing...';
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const arrayBuffer = e.target.result;
                 const uint8Array = new Uint8Array(arrayBuffer);
 
-                // Write the image to Emscripten's virtual FS
-                window.Module.FS.writeFile('input.png', uint8Array);
+                // Allocate memory in Emscripten
+                const dataSize = uint8Array.length;
+                const dataPtr = Module._malloc(dataSize);
+                Module.HEAPU8.set(uint8Array, dataPtr);
 
-                // Read the file into memory for processing
-                const data = window.Module.FS.readFile('input.png', { encoding: 'binary' });
-                const size = data.length;
+                // Get options
+                const colors = parseInt(document.getElementById('colors').value) || 32;
+                const turdsize = parseInt(document.getElementById('turdsize').value) || 2;
+                const alphamax = parseFloat(document.getElementById('alphamax').value) || 1.0;
+                const opttolerance = parseFloat(document.getElementById('opttolerance').value) || 0.2;
+                const resize = parseFloat(document.getElementById('resize').value) || 1.0;
+                const posterize = parseInt(document.getElementById('posterize').value) || 0;
+                const kmeans = parseInt(document.getElementById('kmeans').value) || 0;
+                const blur = document.getElementById('enableBlur').checked ? 8 : 0;
+                const noiseRemoval = document.getElementById('enableNoiseRemoval').checked ? 1 : 0;
+                const edgeBlur = document.getElementById('enableEdgePreservingBlur').checked ? 1 : 0;
+                const dilate = document.getElementById('enableDilation').checked ? 2 : 0;
+                const alpha = document.getElementById('enableAlphaProcessing').checked ? 4 : 0;
+                const debug = document.getElementById('enableDebug').checked ? 1 : 0;
 
-                // Allocate memory in WASM and copy data
-                const ptr = window.Module._malloc(size);
-                window.Module.HEAPU8.set(data, ptr);
+                // Set flags (combine all flags as in C code)
+                const flag = 32 | blur | dilate | alpha | debug; // 32 for SVG output
 
-                // Call process_image using ccall for safety
-                const result = window.Module.ccall(
+                // Write options to Emscripten FS (emulate command-line args)
+                Module.FS.writeFile('/options.txt', JSON.stringify({
+                    colors,
+                    turdsize,
+                    alphamax,
+                    opttolerance,
+                    resize,
+                    posterize,
+                    kmeans,
+                    noise_removal: noiseRemoval,
+                    edge_blur: edgeBlur,
+                    flag
+                }));
+
+                // Call process_image
+                const result = Module.ccall(
                     'process_image',
                     'number',
-                    ['number', 'number', 'number', 'number'],
-                    [ptr, size, 32, 1.0]
+                    ['number', 'number', 'number', 'number', 'number', 'number'],
+                    [dataPtr, dataSize, colors, turdsize, alphamax, opttolerance]
                 );
-                window.Module._free(ptr);
 
-                if (result !== 0) {
-                    throw new Error('Error processing image: ' + (result === -1 ? 'Invalid image format' : 'Image too large'));
+                Module._free(dataPtr);
+
+                if (result === 0) {
+                    try {
+                        const svgData = Module.FS.readFile('/output.svg', { encoding: 'utf8' });
+                        svgOutput.innerHTML = svgData;
+                        downloadButton.disabled = false;
+                        status.textContent = 'Conversion successful!';
+                    } catch (e) {
+                        status.textContent = 'Error reading SVG output: ' + e.message;
+                    }
+                } else if (result === -1) {
+                    status.textContent = 'Error loading image.';
+                } else if (result === -2) {
+                    status.textContent = 'Image too large.';
+                } else {
+                    status.textContent = 'Conversion failed with error code: ' + result;
                 }
+            };
+            reader.readAsArrayBuffer(file);
+        });
 
-                // Read the output SVG from FS
-                const svgData = window.Module.FS.readFile('output.svg', { encoding: 'utf8' });
-
-                // Display the SVG
-                const resultDiv = document.getElementById('result');
-                resultDiv.innerHTML = svgData;
-
-                // Enable download
-                const downloadLink = document.getElementById('downloadLink');
-                downloadLink.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
-                downloadLink.download = 'output.svg';
-                downloadLink.style.display = 'block';
-                downloadLink.textContent = 'Download SVG';
-            } catch (err) {
-                console.error('Processing error:', err);
-                alert('Error: ' + err.message);
+        downloadButton.addEventListener('click', () => {
+            const svgData = svgOutput.innerHTML;
+            if (svgData) {
+                const blob = new Blob([svgData], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'output.svg';
+                a.click();
+                URL.revokeObjectURL(url);
             }
         });
     </script>
+
 </body>
 </html>

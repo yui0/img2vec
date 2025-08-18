@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Img2Vec: Image to Vector Graphics</title>
+    <link rel="icon" href="data:,"> <!-- Suppress favicon error -->
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        #preview, #result { max-width: 500px; margin: 20px auto; }
+        button { padding: 10px 20px; }
+    </style>
+</head>
+<body>
+    <h1>Img2Vec: Convert Image to Vector (SVG)</h1>
+    <input type="file" id="imageUpload" accept="image/*">
+    <br>
+    <img id="preview" alt="Preview">
+    <br>
+    <button id="convertBtn" disabled>Convert to SVG</button>
+    <br>
+    <div id="result"></div>
+    <a id="downloadLink" style="display: none;">Download SVG</a>
+
+    <script type="module">
+        // Import the Emscripten module
+        import * as ModuleFactory from './img2vec.js';
+
+        let Module;
+        async function initModule() {
+            try {
+                console.log('ModuleFactory:', ModuleFactory);
+                // Handle different export formats
+                if (typeof ModuleFactory === 'function') {
+                    Module = await ModuleFactory({ noInitialRun: true }); // Prevent _main from running
+                } else if (typeof ModuleFactory.default === 'function') {
+                    Module = await ModuleFactory.default({ noInitialRun: true });
+                } else if (typeof ModuleFactory.createModule === 'function') {
+                    Module = await ModuleFactory.createModule({ noInitialRun: true });
+                } else {
+                    throw new Error('No valid module factory function found in img2vec.js');
+                }
+                window.Module = Module;
+                console.log('Initialized Module:', Module);
+                document.getElementById('convertBtn').disabled = false;
+                console.log('WebAssembly module loaded successfully');
+            } catch (err) {
+                console.error('Failed to initialize WebAssembly module:', err);
+                alert('Failed to load WebAssembly module. Check console for details.');
+            }
+        }
+        initModule();
+
+        document.getElementById('imageUpload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    document.getElementById('preview').src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('convertBtn').addEventListener('click', async () => {
+            if (!window.Module) {
+                return alert('WebAssembly module not loaded yet!');
+            }
+            const file = document.getElementById('imageUpload').files[0];
+            if (!file) return alert('Upload an image first!');
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                // Write the image to Emscripten's virtual FS
+                window.Module.FS.writeFile('input.png', uint8Array);
+
+                // Read the file into memory for processing
+                const data = window.Module.FS.readFile('input.png', { encoding: 'binary' });
+                const size = data.length;
+
+                // Allocate memory in WASM and copy data
+                const ptr = window.Module._malloc(size);
+                window.Module.HEAPU8.set(data, ptr);
+
+                // Call process_image using ccall for safety
+                const result = window.Module.ccall(
+                    'process_image',
+                    'number',
+                    ['number', 'number', 'number', 'number'],
+                    [ptr, size, 32, 1.0]
+                );
+                window.Module._free(ptr);
+
+                if (result !== 0) {
+                    throw new Error('Error processing image: ' + (result === -1 ? 'Invalid image format' : 'Image too large'));
+                }
+
+                // Read the output SVG from FS
+                const svgData = window.Module.FS.readFile('output.svg', { encoding: 'utf8' });
+
+                // Display the SVG
+                const resultDiv = document.getElementById('result');
+                resultDiv.innerHTML = svgData;
+
+                // Enable download
+                const downloadLink = document.getElementById('downloadLink');
+                downloadLink.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+                downloadLink.download = 'output.svg';
+                downloadLink.style.display = 'block';
+                downloadLink.textContent = 'Download SVG';
+            } catch (err) {
+                console.error('Processing error:', err);
+                alert('Error: ' + err.message);
+            }
+        });
+    </script>
+</body>
+</html>

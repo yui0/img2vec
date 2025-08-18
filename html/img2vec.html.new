@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ Img2Vec: かわいい画像をベクターに変換 ✨</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #f9a8d4, #c4b5fd);
+            font-family: 'Arial', sans-serif;
+        }
+        .btn {
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            transform: scale(1.05);
+        }
+        #preview, #output {
+            max-width: 100%;
+            height: auto;
+            border-radius: 1rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl p-6 max-w-lg w-full">
+        <h1 class="text-3xl font-bold text-center text-pink-600 mb-4">🎨 Img2Vec</h1>
+        <p class="text-center text-gray-600 mb-6">かわいい画像をキラキラなベクターアートに変換しちゃおう！✨</p>
+
+        <!-- Image Upload -->
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">📸 画像をアップロード</label>
+            <input type="file" id="imageInput" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-pink-100 file:text-pink-700 hover:file:bg-pink-200">
+        </div>
+
+        <!-- Options -->
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-3">🎀 設定をカスタマイズ</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="colors" class="block text-sm font-medium text-gray-700">色の数</label>
+                    <input type="range" id="colors" min="2" max="64" value="32" class="w-full h-2 bg-pink-100 rounded-lg appearance-none cursor-pointer">
+                    <span id="colorsValue" class="text-sm text-gray-600">32</span>
+                </div>
+                <div>
+                    <label for="turdsize" class="block text-sm font-medium text-gray-700">小さなノイズ除去</label>
+                    <input type="range" id="turdsize" min="0" max="10" value="2" class="w-full h-2 bg-pink-100 rounded-lg appearance-none cursor-pointer">
+                    <span id="turdsizeValue" class="text-sm text-gray-600">2</span>
+                </div>
+                <div>
+                    <label for="alphamax" class="block text-sm font-medium text-gray-700">エッジの滑らかさ</label>
+                    <input type="range" id="alphamax" min="0" max="2" step="0.1" value="1.0" class="w-full h-2 bg-pink-100 rounded-lg appearance-none cursor-pointer">
+                    <span id="alphamaxValue" class="text-sm text-gray-600">1.0</span>
+                </div>
+                <div>
+                    <label for="opttolerance" class="block text-sm font-medium text-gray-700">カーブの最適化</label>
+                    <input type="range" id="opttolerance" min="0" max="1" step="0.1" value="0.2" class="w-full h-2 bg-pink-100 rounded-lg appearance-none cursor-pointer">
+                    <span id="opttoleranceValue" class="text-sm text-gray-600">0.2</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Convert Button -->
+        <button id="convertBtn" class="btn w-full bg-pink-500 text-white py-2 rounded-full hover:bg-pink-600 mb-6">🌟 SVGに変換！</button>
+
+        <!-- Preview and Output -->
+        <div class="flex flex-col md:flex-row gap-4">
+            <div class="w-full md:w-1/2">
+                <h3 class="text-sm font-medium text-gray-700 mb-2">プレビュー</h3>
+                <img id="preview" class="hidden" alt="Preview Image">
+            </div>
+            <div class="w-full md:w-1/2">
+                <h3 class="text-sm font-medium text-gray-700 mb-2">ベクター結果</h3>
+                <img id="output" class="hidden" alt="Vector Output">
+            </div>
+        </div>
+
+        <!-- Download Button -->
+        <a id="downloadLink" class="btn hidden w-full bg-purple-500 text-white py-2 rounded-full hover:bg-purple-600 mt-6 text-center">💾 SVGをダウンロード</a>
+    </div>
+
+    <script type="module">
+        // Import the Emscripten module
+        import * as ModuleFactory from './img2vec.js';
+
+        let Module;
+        async function initModule() {
+            try {
+                console.log('ModuleFactory:', ModuleFactory);
+                // Handle different export formats
+                if (typeof ModuleFactory === 'function') {
+                    Module = await ModuleFactory({ noInitialRun: true }); // Prevent _main from running
+                } else if (typeof ModuleFactory.default === 'function') {
+                    Module = await ModuleFactory.default({ noInitialRun: true });
+                } else if (typeof ModuleFactory.createModule === 'function') {
+                    Module = await ModuleFactory.createModule({ noInitialRun: true });
+                } else {
+                    throw new Error('No valid module factory function found in img2vec.js');
+                }
+                window.Module = Module;
+                console.log('Initialized Module:', Module);
+                document.getElementById('convertBtn').disabled = false;
+                console.log('WebAssembly module loaded successfully');
+            } catch (err) {
+                console.error('Failed to initialize WebAssembly module:', err);
+                alert('Failed to load WebAssembly module. Check console for details.');
+            }
+        }
+        initModule();
+
+        // Update slider values in real-time
+        const sliders = ['colors', 'turdsize', 'alphamax', 'opttolerance'];
+        sliders.forEach(id => {
+            const slider = document.getElementById(id);
+            const valueSpan = document.getElementById(`${id}Value`);
+            slider.addEventListener('input', () => {
+                valueSpan.textContent = slider.value;
+            });
+        });
+
+        // Handle image upload
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        let imageData;
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    preview.src = event.target.result;
+                    preview.classList.remove('hidden');
+                    imageData = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Convert image to SVG
+        const convertBtn = document.getElementById('convertBtn');
+        const output = document.getElementById('output');
+        const downloadLink = document.getElementById('downloadLink');
+        /*convertBtn.addEventListener('click', async () => {
+            if (!imageData || !Module) return;
+
+            const colors = parseInt(document.getElementById('colors').value);
+            const turdsize = parseInt(document.getElementById('turdsize').value);
+            const alphamax = parseFloat(document.getElementById('alphamax').value);
+            const opttolerance = parseFloat(document.getElementById('opttolerance').value);
+
+            const img = new Image();
+            img.src = imageData;
+            await img.decode();
+
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            const imageDataObj = ctx.getImageData(0, 0, img.width, img.height);
+            const data = imageDataObj.data;
+
+            // Allocate memory for image data
+            const size = data.length;
+            const ptr = Module._malloc(size);
+            Module.HEAPU8.set(data, ptr);
+
+            // Call WebAssembly function with parameters
+            const result = Module._process_image(ptr, size, colors, turdsize, alphamax, opttolerance);
+            Module._free(ptr);
+
+            if (result === 0) {
+                const svgData = Module.FS.readFile('output.svg', { encoding: 'utf8' });
+                const svgBlob = new Blob([svgData], { type: 'image/svg+xml' });
+                const svgUrl = URL.createObjectURL(svgBlob);
+                output.src = svgUrl;
+                output.classList.remove('hidden');
+                downloadLink.href = svgUrl;
+                downloadLink.download = 'output.svg';
+                downloadLink.classList.remove('hidden');
+            } else {
+                alert('エラー: 画像の変換に失敗しました！😢');
+            }
+        });*/
+document.getElementById('convertBtn').addEventListener('click', async () => {
+    // Check if WebAssembly module is loaded
+    if (!window.Module || !window.Module.ccall) {
+        return alert('WebAssembly module not loaded yet! Please wait a moment.');
+    }
+
+    const fileInput = document.getElementById('imageUpload');
+    const file = fileInput.files[0];
+    if (!file) {
+        return alert('Please upload an image first!');
+    }
+
+    try {
+        // Retrieve settings from input fields
+        const numColors = parseInt(document.querySelector('input[aria-label="色の数"]').value) || 32;
+        const noiseRemoval = parseInt(document.querySelector('input[aria-label="小さなノイズ除去"]').value) || 2;
+        const edgeSmoothness = parseFloat(document.querySelector('input[aria-label="エッジの滑らかさ"]').value) || 1.0;
+        const curveOptimization = parseFloat(document.querySelector('input[aria-label="カーブの最適化"]').value) || 0.2;
+
+        // Validate settings
+        if (isNaN(numColors) || numColors < 1) throw new Error('Invalid number of colors');
+        if (isNaN(noiseRemoval) || noiseRemoval < 0) throw new Error('Invalid noise removal value');
+        if (isNaN(edgeSmoothness) || edgeSmoothness < 0) throw new Error('Invalid edge smoothness value');
+        if (isNaN(curveOptimization) || curveOptimization < 0) throw new Error('Invalid curve optimization value');
+
+        // Read the uploaded image
+        const arrayBuffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+
+        // Write the image to Emscripten's virtual filesystem
+        window.Module.FS.writeFile('input.png', uint8Array);
+
+        // Read the file into memory for processing
+        const data = window.Module.FS.readFile('input.png', { encoding: 'binary' });
+        const size = data.length;
+
+        // Allocate memory in WebAssembly and copy data
+        const ptr = window.Module._malloc(size);
+        window.Module.HEAPU8.set(data, ptr);
+
+        // Call the WebAssembly function to process the image
+        const result = window.Module.ccall(
+            'process_image',
+            'number',
+            ['number', 'number', 'number', 'number', 'number', 'number'],
+            [ptr, size, numColors, noiseRemoval, edgeSmoothness, curveOptimization]
+        );
+
+        // Free allocated memory
+        window.Module._free(ptr);
+
+        // Check for processing errors
+        if (result !== 0) {
+            throw new Error('Image processing failed: ' + (result === -1 ? 'Invalid image format' : result === -2 ? 'Image too large' : 'Unknown error'));
+        }
+
+        // Read the output SVG from the filesystem
+        const svgData = window.Module.FS.readFile('output.svg', { encoding: 'utf8' });
+
+        // Display the SVG in the result div
+        const resultDiv = document.getElementById('result');
+        resultDiv.innerHTML = svgData;
+
+        // Update preview if needed
+        const previewDiv = document.getElementById('preview');
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        img.style.maxWidth = '100%';
+        previewDiv.innerHTML = '';
+        previewDiv.appendChild(img);
+
+        // Enable download link
+        const downloadLink = document.getElementById('downloadLink');
+        downloadLink.href = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgData);
+        downloadLink.download = 'output.svg';
+        downloadLink.style.display = 'block';
+        downloadLink.textContent = '💾 SVGをダウンロード';
+    } catch (err) {
+        console.error('Processing error:', err);
+        alert('エラー: 画像の変換に失敗しました！ ' + err.message);
+    }
+});
+    </script>
+</body>
+</html>
