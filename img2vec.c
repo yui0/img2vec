@@ -2,6 +2,21 @@
  *	©2020,2025 Yuichiro Nakada
  * */
 
+/*
+emcc img2vec.c -o img2vec.js \
+  -s ALLOW_MEMORY_GROWTH=1 \
+  -s EXPORTED_FUNCTIONS="['_main', '_process_image', '_malloc', '_free']" \
+  -s EXPORTED_RUNTIME_METHODS="['ccall', 'cwrap', 'FS', 'HEAPU8']" \
+  -s MODULARIZE=1 \
+  -s EXPORT_ES6=1 \
+  -s ENVIRONMENT=web \
+  -fopenmp \
+  -Os \
+  -s ASSERTIONS=1 \
+  -s VERBOSE=1 \
+  -I .
+*/
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
